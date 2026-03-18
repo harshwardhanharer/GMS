@@ -13,6 +13,22 @@ height:100vh;
 padding:20px;
 }
 
+@media (max-width:768px){
+
+.sidebar{
+width:100%;
+display:flex;
+justify-content:space-between;
+flex-wrap:wrap;
+height:auto;
+}
+
+.sidebar button{
+width:48%;
+}
+
+}
+
 .sidebar button{
 display:block;
 width:100%;
@@ -27,6 +43,9 @@ cursor:pointer;
 .main{
 flex:1;
 padding:20px;
+display:grid;
+grid-template-columns:1fr;
+gap:10px;
 }
 
 .section{
@@ -117,4 +136,61 @@ padding:8px;
 margin:5px;
 border:1px solid #ccc;
 border-radius:4px;
+}
+
+
+
+
+
+
+
+
+/* MOBILE RESPONSIVE */
+
+@media (max-width: 768px){
+
+body{
+flex-direction:column;
+}
+
+.sidebar{
+width:100%;
+height:auto;
+display:flex;
+overflow-x:auto;
+}
+
+.sidebar h2{
+display:none;
+}
+
+.sidebar button{
+flex:1;
+margin:5px;
+padding:12px;
+font-size:16px;
+}
+
+.main{
+padding:10px;
+}
+
+.card{
+margin:10px 0;
+}
+
+table{
+font-size:14px;
+}
+
+input,select{
+width:100%;
+margin:5px 0;
+}
+
+button{
+width:100%;
+margin:5px 0;
+}
+
 }
