@@ -4,6 +4,19 @@ window.location="login.html"
 
 
 
+import { db } from "./firebase.js";
+import {
+collection,
+addDoc,
+getDocs,
+deleteDoc,
+doc,
+updateDoc
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+
+
+
 
 /* LOGIN */
 
@@ -60,7 +73,7 @@ checkExpiryAlerts()
 
 /* ADD MEMBER */
 
-function addMember(){
+async function addMember(){
 
 let name=document.getElementById("name").value
 let phone=document.getElementById("phone").value
@@ -94,33 +107,29 @@ paymentHistory:[],
 attendance:{}
 }
 
-let members=JSON.parse(localStorage.getItem("members"))||[]
-
-if(members.length>=100){
-alert("Gym Capacity Full")
-return
-}
-
-members.push(member)
-
-localStorage.setItem("members",JSON.stringify(members))
+await addDoc(collection(db,"members"),member)
 
 loadMembers()
-
-document.getElementById("name").value=""
-document.getElementById("phone").value=""
-document.getElementById("trainer").value=""
 
 }
 
 
 /* LOAD MEMBERS */
 
-function loadMembers(){
+async function loadMembers(){
 
-let members = JSON.parse(localStorage.getItem("members")) || []
+const snapshot = await getDocs(collection(db,"members"))
 
-let list = document.getElementById("memberList")
+let members=[]
+
+snapshot.forEach(doc=>{
+members.push({
+id:doc.id,
+...doc.data()
+})
+})
+
+let list=document.getElementById("memberList")
 
 if(!list) return
 
@@ -128,7 +137,7 @@ list.innerHTML=""
 
 members.forEach((m,i)=>{
 
-list.innerHTML += `
+list.innerHTML+=`
 <tr>
 <td>${m.name}</td>
 <td>${m.phone}</td>
@@ -136,27 +145,14 @@ list.innerHTML += `
 <td>${m.trainer}</td>
 <td>${m.expiry}</td>
 <td>
-<button onclick="editMember(${i})">Edit</button>
-<button onclick="deleteMember(${i})">Delete</button>
-<button onclick="renewMember(${i})">Renew</button>
+<button onclick="deleteMember('${m.id}')">Delete</button>
 </td>
 </tr>
 `
 
 })
 
-let total=document.getElementById("totalMembers")
-if(total){
-total.innerText=members.length
 }
-
-loadPayments()
-loadAttendance()
-checkExpiryAlerts()
-
-}
-
-
 
 
 
@@ -185,17 +181,11 @@ loadMembers()
 
 /* DELETE MEMBER */
 
-function deleteMember(index){
+async function deleteMember(id){
 
-if(!confirm("Are you sure you want to delete this member?")){
-return
-}
+if(!confirm("Delete this member?")) return
 
-let members = JSON.parse(localStorage.getItem("members")) || []
-
-members.splice(index,1)
-
-localStorage.setItem("members",JSON.stringify(members))
+await deleteDoc(doc(db,"members",id))
 
 loadMembers()
 
