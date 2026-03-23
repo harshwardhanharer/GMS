@@ -2,9 +2,8 @@ if(!localStorage.getItem("loggedIn") && window.location.pathname.includes("dashb
 window.location="login.html"
 }
 
-
-
 import { db } from "./firebase.js";
+
 import {
 collection,
 addDoc,
@@ -14,7 +13,7 @@ doc,
 updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-
+let members=[]
 
 
 
@@ -28,7 +27,6 @@ let pass=document.getElementById("password")?.value.trim()
 if(user==="admin" && pass==="1234"){
 
 localStorage.setItem("loggedIn","true")
-
 window.location.href="dashboard.html"
 
 }else{
@@ -42,33 +40,10 @@ alert("Wrong Login")
 function logout(){
 
 localStorage.removeItem("loggedIn")
-
 window.location="login.html"
 
 }
 
-
-/* SECTION CONTROL */
-
-function showSection(id){
-
-let sections=document.querySelectorAll(".section")
-
-sections.forEach(s=>s.style.display="none")
-
-let target=document.getElementById(id)
-
-if(target){
-target.style.display="block"
-}
-
-if(id=="dashboard"){
-updateRevenue()
-updateTodayAttendance()
-checkExpiryAlerts()
-}
-
-}
 
 
 /* ADD MEMBER */
@@ -114,23 +89,25 @@ loadMembers()
 }
 
 
+
 /* LOAD MEMBERS */
 
 async function loadMembers(){
 
-const snapshot = await getDocs(collection(db,"members"))
+members=[]
 
-let members=[]
+const snapshot=await getDocs(collection(db,"members"))
 
-snapshot.forEach(doc=>{
+snapshot.forEach(d=>{
+
 members.push({
-id:doc.id,
-...doc.data()
+id:d.id,
+...d.data()
 })
+
 })
 
 let list=document.getElementById("memberList")
-
 if(!list) return
 
 list.innerHTML=""
@@ -146,37 +123,19 @@ list.innerHTML+=`
 <td>${m.expiry}</td>
 <td>
 <button onclick="deleteMember('${m.id}')">Delete</button>
+<button onclick="renewMember(${i})">Renew</button>
 </td>
 </tr>
 `
 
 })
 
-}
-
-
-
-function editMember(index){
-
-let members = JSON.parse(localStorage.getItem("members")) || []
-
-let m = members[index]
-
-let newName = prompt("Edit Name",m.name)
-let newPhone = prompt("Edit Phone",m.phone)
-
-if(newName && newPhone){
-
-members[index].name=newName
-members[index].phone=newPhone
-
-localStorage.setItem("members",JSON.stringify(members))
-
-loadMembers()
+loadPayments()
+loadAttendance()
+updateRevenue()
 
 }
 
-}
 
 
 /* DELETE MEMBER */
@@ -193,61 +152,59 @@ loadMembers()
 
 
 
-function renewMember(index){
+/* RENEW MEMBER */
 
-let members=JSON.parse(localStorage.getItem("members"))||[]
+async function renewMember(index){
+
+let m=members[index]
 
 let today=new Date()
 
 let next=new Date(today)
-
 next.setMonth(next.getMonth()+1)
 
 let newDate=next.toISOString().split("T")[0]
 
-members[index].expiry=newDate
-members[index].nextDue=newDate
-members[index].lastPayment=today.toISOString().split("T")[0]
+await updateDoc(doc(db,"members",m.id),{
 
-localStorage.setItem("members",JSON.stringify(members))
+expiry:newDate,
+nextDue:newDate,
+lastPayment:today.toISOString().split("T")[0]
+
+})
 
 loadMembers()
-loadPayments()
-updateRevenue()
-createRevenueChart()
 
 }
+
 
 
 /* PAYMENTS */
 
 function loadPayments(){
 
-let members = JSON.parse(localStorage.getItem("members")) || []
-
-let list = document.getElementById("paymentList")
-
+let list=document.getElementById("paymentList")
 if(!list) return
 
 list.innerHTML=""
 
-let today = new Date().toISOString().split("T")[0]
+let today=new Date().toISOString().split("T")[0]
 
 members.forEach((m,i)=>{
 
 let btn=""
 
-if(m.lastPayment === today){
+if(m.lastPayment===today){
 btn=`<button disabled>Paid</button>`
 }else{
 btn=`<button onclick="recordPayment(${i})">Mark Paid</button>`
 }
 
-list.innerHTML += `
+list.innerHTML+=`
 <tr>
 <td>${m.name}</td>
 <td>₹${m.fee}</td>
-<td>${m.nextDue || "N/A"}</td>
+<td>${m.nextDue||"N/A"}</td>
 <td>${btn}</td>
 </tr>
 `
@@ -258,44 +215,38 @@ list.innerHTML += `
 
 
 
-function recordPayment(index){
+async function recordPayment(index){
 
-let members = JSON.parse(localStorage.getItem("members")) || []
+let m=members[index]
 
-let today = new Date()
+let today=new Date()
 
-let paymentDate = today.toISOString().split("T")[0]
+let paymentDate=today.toISOString().split("T")[0]
 
-if(members[index].lastPayment === paymentDate){
-alert("Payment already recorded today")
-return
-}
-
-let nextDue = new Date(today)
+let nextDue=new Date(today)
 nextDue.setMonth(nextDue.getMonth()+1)
 
-nextDue = nextDue.toISOString().split("T")[0]
+nextDue=nextDue.toISOString().split("T")[0]
 
-let paymentRecord={
-amount:members[index].fee,
+let history=m.paymentHistory||[]
+
+history.push({
+amount:m.fee,
 date:paymentDate
-}
+})
 
-members[index].paymentHistory.push(paymentRecord)
+await updateDoc(doc(db,"members",m.id),{
 
-members[index].lastPayment=paymentDate
-members[index].nextDue=nextDue
-members[index].expiry=nextDue
+paymentHistory:history,
+lastPayment:paymentDate,
+nextDue:nextDue,
+expiry:nextDue
 
-localStorage.setItem("members",JSON.stringify(members))
+})
 
-loadPayments()
 loadMembers()
-updateRevenue()
-createRevenueChart()
 
 }
-
 
 
 
@@ -303,13 +254,10 @@ createRevenueChart()
 
 function loadAttendance(){
 
-let members = JSON.parse(localStorage.getItem("members")) || []
-
-let list = document.getElementById("attendanceList")
-
+let list=document.getElementById("attendanceList")
 if(!list) return
 
-let today = new Date().toISOString().split("T")[0]
+let today=new Date().toISOString().split("T")[0]
 
 list.innerHTML=""
 
@@ -321,7 +269,7 @@ if(m.attendance && m.attendance[today]){
 status=m.attendance[today]
 }
 
-list.innerHTML += `
+list.innerHTML+=`
 <tr>
 <td>${m.name}</td>
 <td><button onclick="markPresent(${i})">Present</button></td>
@@ -335,58 +283,58 @@ list.innerHTML += `
 }
 
 
-/* MARK PRESENT */
 
-function markPresent(index){
+async function markPresent(index){
 
-let members = JSON.parse(localStorage.getItem("members")) || []
+let m=members[index]
 
-let today = new Date().toISOString().split("T")[0]
+let today=new Date().toISOString().split("T")[0]
 
-if(!members[index].attendance){
-members[index].attendance={}
-}
+let attendance=m.attendance||{}
 
-members[index].attendance[today]="Present"
+attendance[today]="Present"
 
-localStorage.setItem("members",JSON.stringify(members))
+await updateDoc(doc(db,"members",m.id),{
 
-loadAttendance()
-updateTodayAttendance()
+attendance:attendance
 
-}
+})
 
-
-/* MARK ABSENT */
-
-function markAbsent(index){
-
-let members = JSON.parse(localStorage.getItem("members")) || []
-
-let today = new Date().toISOString().split("T")[0]
-
-if(!members[index].attendance){
-members[index].attendance={}
-}
-
-members[index].attendance[today]="Absent"
-
-localStorage.setItem("members",JSON.stringify(members))
-
-loadAttendance()
-updateTodayAttendance()
+loadMembers()
 
 }
 
 
+
+async function markAbsent(index){
+
+let m=members[index]
+
+let today=new Date().toISOString().split("T")[0]
+
+let attendance=m.attendance||{}
+
+attendance[today]="Absent"
+
+await updateDoc(doc(db,"members",m.id),{
+
+attendance:attendance
+
+})
+
+loadMembers()
+
+}
+
+
+
+/* TODAY ATTENDANCE */
 
 function updateTodayAttendance(){
 
-let members = JSON.parse(localStorage.getItem("members")) || []
+let today=new Date().toISOString().split("T")[0]
 
-let today = new Date().toISOString().split("T")[0]
-
-let count = 0
+let count=0
 
 members.forEach(m=>{
 
@@ -406,98 +354,15 @@ el.innerText=count
 
 
 
-function viewAttendance(){
-
-let date=document.getElementById("attendanceDate").value
-
-if(!date){
-alert("Select a date")
-return
-}
-
-let members=JSON.parse(localStorage.getItem("members"))||[]
-
-let list=document.getElementById("attendanceHistory")
-
-if(!list) return
-
-list.innerHTML=""
-
-members.forEach(m=>{
-
-let status="Absent"
-
-if(m.attendance && m.attendance[date]){
-status=m.attendance[date]
-}
-
-list.innerHTML+=`
-<tr>
-<td>${m.name}</td>
-<td>${status}</td>
-</tr>
-`
-
-})
-
-}
-
-
-
-
-/* SEARCH MEMBER */
-function searchMember(){
-
-let text=document.getElementById("searchMember").value.toLowerCase()
-
-let members=JSON.parse(localStorage.getItem("members"))||[]
-
-let list=document.getElementById("memberList")
-
-if(!list) return
-
-list.innerHTML=""
-
-members.forEach((m,i)=>{
-
-if(m.name.toLowerCase().includes(text)){
-
-list.innerHTML+=`
-<tr>
-<td>${m.name}</td>
-<td>${m.phone}</td>
-<td>${m.batch}</td>
-<td>${m.trainer}</td>
-<td>${m.expiry}</td>
-<td>
-<button onclick="editMember(${i})">Edit</button>
-<button onclick="deleteMember(${i})">Delete</button>
-<button onclick="renewMember(${i})">Renew</button>
-</td>
-</tr>
-`
-
-}
-
-})
-
-}
-
-
-
-
-
-/* UPDATE REVENUE */
+/* REVENUE */
 
 function updateRevenue(){
 
-let members = JSON.parse(localStorage.getItem("members")) || []
+let revenue=0
 
-let revenue = 0
-
-let today = new Date()
-let month = today.getMonth()
-let year = today.getFullYear()
+let today=new Date()
+let month=today.getMonth()
+let year=today.getFullYear()
 
 members.forEach(m=>{
 
@@ -518,6 +383,7 @@ revenue+=p.amount
 })
 
 let el=document.getElementById("revenue")
+
 if(el){
 el.innerText=revenue
 }
@@ -526,206 +392,17 @@ el.innerText=revenue
 
 
 
-let revenueChart
-
-function createRevenueChart(){
-
-let members = JSON.parse(localStorage.getItem("members")) || []
-
-let monthly=[0,0,0,0,0,0,0,0,0,0,0,0]
-
-members.forEach(m=>{
-
-if(m.paymentHistory){
-
-m.paymentHistory.forEach(p=>{
-
-let d=new Date(p.date)
-
-let month=d.getMonth()
-
-monthly[month]+=p.amount
-
-})
-
-}
-
-})
-
-let canvas=document.getElementById("revenueChart")
-
-if(!canvas) return
-
-let ctx=canvas.getContext("2d")
-
-if(revenueChart){
-revenueChart.destroy()
-}
-
-revenueChart=new Chart(ctx,{
-
-type:"bar",
-
-data:{
-labels:["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
-datasets:[{
-label:"Monthly Revenue",
-data:monthly,
-backgroundColor:"#ff4d00"
-}]
-},
-
-options:{
-responsive:true,
-scales:{
-y:{beginAtZero:true}
-}
-}
-
-})
-
-}
-
-
-
-
-/* EXPIRY ALERT */
-
-function checkExpiryAlerts(){
-
-let members = JSON.parse(localStorage.getItem("members")) || []
-
-let today = new Date()
-
-let list = document.getElementById("expiryAlerts")
-
-if(!list) return
-
-list.innerHTML=""
-
-members.forEach(m=>{
-
-let exp=new Date(m.expiry)
-
-let diff=(exp-today)/(1000*60*60*24)
-
-if(diff<=5){
-
-list.innerHTML+=`<li>${m.name} - ${m.expiry}</li>`
-
-}
-
-})
-
-}
-
-
-
-
-
-
-function addTrainer(){
-
-let name=document.getElementById("trainerName").value
-
-if(!name){
-alert("Enter trainer name")
-return
-}
-
-let trainers=JSON.parse(localStorage.getItem("trainers"))||[]
-
-trainers.push(name)
-
-localStorage.setItem("trainers",JSON.stringify(trainers))
-
-document.getElementById("trainerName").value=""
-
-loadTrainers()
-
-}
-
-
-
-function loadTrainers(){
-
-let trainers = JSON.parse(localStorage.getItem("trainers")) || []
-
-let list = document.getElementById("trainerList")
-
-if(!list) return
-
-list.innerHTML=""
-
-trainers.forEach((t,i)=>{
-
-list.innerHTML += `
-<li>
-${t}
-<button onclick="deleteTrainer(${i})">Remove</button>
-</li>
-`
-
-})
-
-}
-
-
-
-
-
-
-
-function deleteTrainer(index){
-
-if(!confirm("Remove this trainer?")) return
-
-let trainers = JSON.parse(localStorage.getItem("trainers")) || []
-
-trainers.splice(index,1)
-
-localStorage.setItem("trainers",JSON.stringify(trainers))
-
-loadTrainers()
-
-}
-
-
-
-
-
-function refreshRevenue(){
-
-updateRevenue()
-
-createRevenueChart()
-
-}
-
-
-
-
-
-
-
-window.deleteTrainer = deleteTrainer
-window.refreshRevenue = refreshRevenue
-window.login = login
-
-
-
-
+/* INIT */
+
+window.login=login
+window.deleteMember=deleteMember
+window.renewMember=renewMember
+window.recordPayment=recordPayment
+window.markPresent=markPresent
+window.markAbsent=markAbsent
 
 window.onload=function(){
 
 loadMembers()
-loadPayments()
-loadAttendance()
-updateRevenue()
-updateTodayAttendance()
-checkExpiryAlerts()
-createRevenueChart()
-
-showSection("dashboard")
 
 }
