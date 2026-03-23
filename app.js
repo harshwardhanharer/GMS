@@ -470,11 +470,13 @@ loadTrainers()
 
 /* PAGE LOAD */
 
-window.deleteMember=deleteMember
-window.markPresent=markPresent
-window.markAbsent=markAbsent
-window.recordPayment=recordPayment
-window.login=login
+window.login = login
+window.logout = logout
+window.addMember = addMember
+window.deleteMember = deleteMember
+window.recordPayment = recordPayment
+window.markPresent = markPresent
+window.markAbsent = markAbsent
 
 window.onload=function(){
 
